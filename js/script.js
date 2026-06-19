@@ -37,6 +37,39 @@ document.addEventListener('DOMContentLoaded', async function () {
 });
 
 // ===========================
+// CACHING & ANALYTICS HELPERS
+// ===========================
+
+async function getProductsCached(){
+    // try sessionStorage first
+    try{
+        const key = 'jmdmall_products_v1';
+        const cached = sessionStorage.getItem(key);
+        if(cached){
+            try{ return JSON.parse(cached); } catch(e){ sessionStorage.removeItem(key); }
+        }
+
+        const res = await fetch(CONFIG.CSV_URL);
+        if(!res.ok) throw new Error('CSV not found');
+        const text = await res.text();
+        const parsed = parseCSV(text);
+        try{ sessionStorage.setItem(key, JSON.stringify(parsed)); } catch(e) { /* ignore storage errors */ }
+        return parsed;
+    } catch(e){
+        console.error('getProductsCached error', e);
+        throw e;
+    }
+}
+
+function trackEvent(name, data = {}){
+    const payload = { event: name, ...data };
+    // console log for lightweight analytics
+    try{ console.log('analytics', payload); } catch(e){}
+    // push to dataLayer if present
+    try{ if(window.dataLayer) window.dataLayer.push(payload); } catch(e){}
+}
+
+// ===========================
 // LOAD PRODUCTS
 // ===========================
 
@@ -46,16 +79,8 @@ async function loadProducts() {
 
     try {
 
-        const response = await fetch(CONFIG.CSV_URL);
-
-        if (!response.ok) {
-            throw new Error('CSV not found');
-        }
-
-        const csvText = await response.text();
-
-        allProducts = parseCSV(csvText);
-
+        // use cached fetch/parse helper
+        allProducts = await getProductsCached();
         filteredProducts = [...allProducts];
 
         // If index page (has categoriesGrid), render categories + limited featured
@@ -68,9 +93,11 @@ async function loadProducts() {
                 viewAllWrapper.style.display = 'block';
                 document.getElementById('viewAllLink').href = 'all-products.html';
             }
+            trackEvent('page_load', { page: 'index', initialProducts: featured.length });
         } else {
             // standard full render
             renderProducts(filteredProducts);
+            trackEvent('page_load', { page: 'products_full', totalProducts: filteredProducts.length });
         }
 
     }
