@@ -894,3 +894,240 @@ a:hover {
         height: 220px;
     }
 }
+
+
+/* =====================================
+   JMD MALL PRODUCT UPGRADE
+===================================== */
+
+.price-box{
+    margin:10px 0;
+}
+
+.mrp-price{
+    font-size:14px;
+    color:#777;
+    text-decoration:line-through;
+}
+
+.selling-price{
+    font-size:24px;
+    font-weight:700;
+    color:#e63946;
+}
+
+.discount-badge{
+    position:absolute;
+    top:10px;
+    left:10px;
+    width:60px;
+    height:60px;
+    background:#e63946;
+    color:#fff;
+    border-radius:50%;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-size:12px;
+    font-weight:700;
+    text-align:center;
+    z-index:5;
+}
+
+.hot-deal-badge{
+    position:absolute;
+    bottom:10px;
+    left:10px;
+    background:#ff0000;
+    color:#fff;
+    padding:6px 10px;
+    border-radius:20px;
+    font-size:12px;
+    font-weight:700;
+    z-index:5;
+}
+
+.flat-discount{
+    display:inline-block;
+    margin-top:8px;
+    background:#28a745;
+    color:#fff;
+    padding:5px 10px;
+    border-radius:4px;
+    font-size:13px;
+    font-weight:600;
+}
+
+.product-rating{
+    margin-top:8px;
+    color:#f39c12;
+    font-size:14px;
+    font-weight:600;
+}
+
+.product-card{
+    position:relative;
+}
+
+.product-card a{
+    text-decoration:none;
+}
+
+.product-name{
+    min-height:48px;
+}
+
+.product-image{
+    background:#fff;
+}
+
+.product-card:hover{
+    transform:translateY(-4px);
+}
+
+.buy-btn{
+    background:#25D366;
+}
+
+.buy-btn:hover{
+    background:#1ea952;
+}
+
+.share-btn{
+    background:#146EB4;
+}
+
+.share-btn:hover{
+    background:#0f4f82;
+}
+
+/* PRODUCT DETAILS PAGE */
+
+.product-page{
+    max-width:1400px;
+    margin:30px auto;
+    padding:20px;
+}
+
+.product-detail-card{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:40px;
+    background:#fff;
+    padding:25px;
+    border-radius:12px;
+    box-shadow:0 2px 10px rgba(0,0,0,.08);
+}
+
+.product-detail-image{
+    width:100%;
+    border-radius:10px;
+    max-height:550px;
+    object-fit:contain;
+    background:#fff;
+}
+
+.price-row{
+    margin:15px 0;
+}
+
+.mrp{
+    text-decoration:line-through;
+    color:#777;
+    margin-right:10px;
+}
+
+.sell-price{
+    font-size:32px;
+    font-weight:700;
+    color:#e63946;
+}
+
+.discount-circle{
+    display:inline-block;
+    background:#e63946;
+    color:#fff;
+    padding:8px 12px;
+    border-radius:999px;
+    margin-left:10px;
+    font-size:14px;
+}
+
+.hot-deal{
+    display:inline-block;
+    background:#ff0000;
+    color:#fff;
+    padding:8px 14px;
+    border-radius:6px;
+    font-weight:700;
+    margin-bottom:10px;
+}
+
+.detail-table{
+    margin-top:20px;
+}
+
+.detail-table div{
+    padding:12px 0;
+    border-bottom:1px solid #eee;
+}
+
+.assured-box{
+    margin-top:25px;
+    padding:20px;
+    background:#f8f9fa;
+    border-radius:8px;
+}
+
+.whatsapp-btn{
+    display:inline-block;
+    margin-top:20px;
+    background:#25D366;
+    color:#fff;
+    padding:14px 22px;
+    border-radius:8px;
+    font-weight:700;
+}
+
+.whatsapp-btn:hover{
+    color:#fff;
+}
+
+.out-stock{
+    color:red;
+    font-weight:700;
+}
+
+.in-stock{
+    color:green;
+    font-weight:700;
+}
+
+/* FEATURED PRODUCT */
+
+.featured-product{
+    border:2px solid #FF9900;
+}
+
+/* MOBILE */
+
+@media(max-width:768px){
+
+    .product-detail-card{
+        grid-template-columns:1fr;
+    }
+
+    .discount-badge{
+        width:50px;
+        height:50px;
+        font-size:10px;
+    }
+
+    .selling-price{
+        font-size:20px;
+    }
+
+    .sell-price{
+        font-size:24px;
+    }
+}
