@@ -9,6 +9,14 @@
 </head>
 <body>
 
+    <!-- Top contact bar -->
+    <div class="top-contact-bar">
+        <div class="top-contact-container">
+            <a class="top-contact-link" id="topPhone" href="https://wa.me/9779705446407?text=Hello%20JMD%20Mall" target="_blank">📱 +977 9705446407</a>
+            <a class="top-contact-link" id="topEmail" href="mailto:info@jmdmall.com">✉️ info@jmdmall.com</a>
+        </div>
+    </div>
+
     <!-- Navigation -->
     <nav class="navbar">
         <div class="nav-container">
@@ -57,11 +65,19 @@
 
     </section>
 
-    <!-- Trust Bar -->
+    <!-- Categories (clickable tiles) -->
+    <section class="categories-section">
+        <div class="filter-container">
+            <h2>Categories</h2>
+            <p class="products-subtitle">Shop by category</p>
+            <div class="categories-grid" id="categoriesGrid">
+                <!-- injected by JS -->
+            </div>
+        </div>
+    </section>
 
+    <!-- Trust Bar (reduced on index - two items moved to footer) -->
     <section class="trust-bar">
-        <div>✅ JMDMall Assured</div>
-        <div>🚚 Fast Delivery</div>
         <div>💵 Cash on Delivery</div>
         <div>🔄 Easy Returns</div>
         <div>📞 24/7 Support</div>
@@ -103,7 +119,7 @@
 
     </section>
 
-    <!-- Products Grid -->
+    <!-- Products Grid (for featured: limited to 12 by JS) -->
 
     <main class="products-container">
 
@@ -113,6 +129,10 @@
                 Loading products...
             </div>
 
+        </div>
+
+        <div class="view-all-wrapper" id="viewAllWrapper" style="display:none;text-align:center;margin-top:12px;">
+            <a id="viewAllLink" class="action-btn" href="#">View all</a>
         </div>
 
     </main>
@@ -156,17 +176,22 @@
 
                 <p>
                     WhatsApp:
-                    <strong>+977 9705446407</strong>
+                    <strong><a href="https://wa.me/9779705446407?text=Hello%20JMD%20Mall" target="_blank">+977 9705446407</a></strong>
                 </p>
 
                 <p>
                     Email:
-                    <strong>info@jmdmall.com</strong>
+                    <strong><a href="mailto:info@jmdmall.com">info@jmdmall.com</a></strong>
                 </p>
 
                 <p>
                     Delivery by:
                     <strong>Jay Mata Di Enterprises</strong>
+                </p>
+
+                <p>
+                    ✅ JMDMall Assured<br>
+                    🚚 Fast Delivery
                 </p>
 
             </div>
@@ -181,7 +206,7 @@
 
     </footer>
 
-    <script src="js/script.js?v=2"></script>
+    <script src="js/script.js?v=3"></script>
 
 </body>
 </html>
