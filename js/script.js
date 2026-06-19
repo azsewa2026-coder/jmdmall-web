@@ -95,12 +95,10 @@ function parseCSV(csvText) {
         // Build images array from possible columns
         const images = [];
         if (product.main_image) images.push(product.main_image);
-        ['img2','img3','img4','img5'].forEach(k => {
+        ['img2','img3','img4','img5','img6'].forEach(k => {
             if (product[k] && product[k].trim()) images.push(product[k].trim());
         });
 
-        // If any other image fields exist (sometimes CSV might have additional columns), try to include them
-        // also handle older 'image' field for backward compatibility
         if (product.image && !images.length) images.push(product.image);
 
         product.images = images;
@@ -184,15 +182,21 @@ function renderProducts(products) {
 }
 
 // ===========================
-// PRODUCT CARD
+// PRODUCT CARD (GRID) - adjusted layout for compact Flipkart-like box
 // ===========================
 
 function createProductCard(product) {
     const discountPercent = getDiscountPercent(product.mrp, product.selling_price);
-    const hotDeal = isHotDeal(product);
     const finalPrice = getFinalPrice(product);
 
-    // Use product.image (first image) for grid only
+    // compact name and description
+    const shortDesc = (product.description || '').split('\n')[0] || '';
+
+    // image badge for flat discount displayed on image
+    const flatDiscountBadge = Number(product.discount_amount) > 0
+        ? `<div class="flat-image-badge">₹${Number(product.discount_amount).toLocaleString('en-IN')} off</div>`
+        : '';
+
     const imgSrc = product.image || 'images/placeholder.svg';
 
     return `
@@ -200,41 +204,37 @@ function createProductCard(product) {
         <a href="product.html?id=${product.id}" style="text-decoration:none;color:inherit;">
             <div class="product-image-wrapper">
                 <img class="product-image" src="${imgSrc}" alt="${escapeHTML(product.name)}" loading="lazy" onerror="this.src='images/placeholder.svg'">
-
-                <span class="product-category">${product.category}</span>
-
-                ${hotDeal ? '<span class="hot-deal-badge">🔥 HOT DEAL</span>' : ''}
-
-                ${discountPercent > 0 ? `
-                    <span class="discount-badge">${discountPercent}% OFF</span>
-                ` : ''}
+                ${flatDiscountBadge}
             </div>
         </a>
 
-        <div class="product-info">
+        <div class="product-info compact">
             <a href="product.html?id=${product.id}" style="text-decoration:none;color:inherit;">
-                <h3 class="product-name">${escapeHTML(product.name)}</h3>
+                <h4 class="grid-product-name">${escapeHTML(product.name)}</h4>
             </a>
 
-            <div class="price-box">
-                <div class="mrp-price">₹${formatPrice(product.mrp)}</div>
-                <div class="selling-price">₹${formatPrice(product.selling_price)}</div>
+            <p class="grid-product-desc">${escapeHTML(shortDesc)}</p>
+
+            <div class="price-row-grid">
+                <span class="mrp-price">₹${formatPrice(product.mrp)}</span>
+                <span class="selling-price">₹${formatPrice(product.selling_price)}</span>
+                ${discountPercent > 0 ? `<span class="discount-percent">${discountPercent}% OFF</span>` : ''}
             </div>
 
-            ${Number(product.discount_amount) > 0 ? `<div class="flat-discount">Flat ₹${product.discount_amount} OFF</div>` : ''}
-
-            <div class="product-rating">⭐ ${product.rating || '5'} (${product.reviews || '0'})</div>
+            <div class="product-rating small">
+                ⭐ ${product.rating || '5'} (${product.reviews || '0'})
+            </div>
         </div>
     </div>
     `;
 }
 
 // ===========================
-// ATTACH CARD EVENTS
+// ATTACH CARD EVENTS (grid has no buy/share buttons)
 // ===========================
 
 function attachProductCardListeners() {
-    // Grid now navigates to product page; Buy/Share removed from grid
+    // nothing needed for compact grid cards
 }
 
 // Re-attach after render (no special listeners needed now)
