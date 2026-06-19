@@ -26,6 +26,9 @@ const filterButtons = document.querySelectorAll('.filter-btn');
 
 document.addEventListener('DOMContentLoaded', async function () {
 
+    // initialize GA4 if configured (meta tag or global variable)
+    initGA4FromMeta();
+
     await loadProducts();
 
     setupEventListeners();
@@ -37,6 +40,69 @@ document.addEventListener('DOMContentLoaded', async function () {
 });
 
 // ===========================
+// CACHING & ANALYTICS HELPERS
+// ===========================
+
+async function getProductsCached(){
+    // try sessionStorage first
+    try{
+        const key = 'jmdmall_products_v1';
+        const cached = sessionStorage.getItem(key);
+        if(cached){
+            try{ return JSON.parse(cached); } catch(e){ sessionStorage.removeItem(key); }
+        }
+
+        const res = await fetch(CONFIG.CSV_URL);
+        if(!res.ok) throw new Error('CSV not found');
+        const text = await res.text();
+        const parsed = parseCSV(text);
+        try{ sessionStorage.setItem(key, JSON.stringify(parsed)); } catch(e) { /* ignore storage errors */ }
+        return parsed;
+    } catch(e){
+        console.error('getProductsCached error', e);
+        throw e;
+    }
+}
+
+// GA4 bootstrap: reads <meta name="ga-id" content="G-XXXX"> or window.GA_MEASUREMENT_ID
+function initGA4FromMeta(){
+    try{
+        const meta = document.querySelector('meta[name="ga-id"]');
+        const id = (meta && meta.content) || window.GA_MEASUREMENT_ID;
+        if(!id) return;
+        // inject gtag script
+        if(!window.gtag){
+            const s1 = document.createElement('script');
+            s1.async = true;
+            s1.src = `https://www.googletagmanager.com/gtag/js?id=${id}`;
+            document.head.appendChild(s1);
+            window.dataLayer = window.dataLayer || [];
+            function gtag(){dataLayer.push(arguments);} // eslint-disable-line no-inner-declarations
+            window.gtag = function(){ window.dataLayer.push(arguments); };
+            window.gtag('js', new Date());
+            window.gtag('config', id, { 'send_page_view': false }); // we'll send events manually
+            console.log('GA4 initialized', id);
+        }
+    }catch(e){ console.warn('initGA4 error', e); }
+}
+
+function trackEvent(name, data = {}){
+    const payload = { event: name, ...data };
+    // console log for lightweight analytics
+    try{ console.log('analytics', payload); } catch(e){}
+    // push to dataLayer if present
+    try{ if(window.dataLayer) window.dataLayer.push(payload); } catch(e){}
+    // if gtag is available, send as GA4 event (map event name and params)
+    try{
+        if(window.gtag){
+            // GA4 reserved event name rules: convert to lowercase underscores
+            const gaName = String(name).replace(/[^a-zA-Z0-9_]/g, '_').toLowerCase();
+            window.gtag('event', gaName, data);
+        }
+    }catch(e){ console.warn('gtag send failed', e); }
+}
+
+// ===========================
 // LOAD PRODUCTS
 // ===========================
 
@@ -46,19 +112,26 @@ async function loadProducts() {
 
     try {
 
-        const response = await fetch(CONFIG.CSV_URL);
-
-        if (!response.ok) {
-            throw new Error('CSV not found');
-        }
-
-        const csvText = await response.text();
-
-        allProducts = parseCSV(csvText);
-
+        // use cached fetch/parse helper
+        allProducts = await getProductsCached();
         filteredProducts = [...allProducts];
 
-        renderProducts(filteredProducts);
+        // If index page (has categoriesGrid), render categories + limited featured
+        if (document.getElementById('categoriesGrid')) {
+            renderCategories(allProducts);
+            const featured = filteredProducts.slice(0, 12);
+            renderProducts(featured);
+            const viewAllWrapper = document.getElementById('viewAllWrapper');
+            if (viewAllWrapper) {
+                viewAllWrapper.style.display = 'block';
+                document.getElementById('viewAllLink').href = 'all-products.html';
+            }
+            trackEvent('page_load', { page: 'index', initialProducts: featured.length });
+        } else {
+            // standard full render
+            renderProducts(filteredProducts);
+            trackEvent('page_load', { page: 'products_full', totalProducts: filteredProducts.length });
+        }
 
     }
     catch (error) {
@@ -74,32 +147,35 @@ async function loadProducts() {
 // CSV PARSER
 // ===========================
 
+// Simple CSV parser that supports quoted fields containing commas.
 function parseCSV(csvText) {
+    const lines = csvText.trim().split(/\r?\n/).filter(Boolean);
+    if (!lines.length) return [];
 
-    const lines = csvText.trim().split('\n');
-
-    const headers = lines[0]
-        .split(',')
-        .map(h => h.trim());
-
+    const headers = parseCSVLine(lines[0]);
     const products = [];
 
     for (let i = 1; i < lines.length; i++) {
-
         if (!lines[i].trim()) continue;
 
-        const values = lines[i].split(',');
-
+        const values = parseCSVLine(lines[i]);
         const product = {};
 
         headers.forEach((header, index) => {
-
-            product[header] =
-                values[index]
-                    ? values[index].trim()
-                    : '';
-
+            product[header] = values[index] ? values[index].trim() : '';
         });
+
+        // Build images array from possible columns
+        const images = [];
+        if (product.main_image) images.push(product.main_image);
+        ['img2','img3','img4','img5','img6'].forEach(k => {
+            if (product[k] && product[k].trim()) images.push(product[k].trim());
+        });
+
+        if (product.image && !images.length) images.push(product.image);
+
+        product.images = images;
+        product.image = images[0] || product.image || 'images/placeholder.svg';
 
         products.push(product);
     }
@@ -107,42 +183,92 @@ function parseCSV(csvText) {
     return products;
 }
 
+// parse a single CSV line into fields, handling quoted values with commas
+function parseCSVLine(line) {
+    const result = [];
+    let cur = '';
+    let inQuotes = false;
+
+    for (let i = 0; i < line.length; i++) {
+        const ch = line[i];
+
+        if (ch === '"') {
+            // Check for escaped quote
+            if (inQuotes && line[i+1] === '"') {
+                cur += '"';
+                i++; // skip escaped quote
+            } else {
+                inQuotes = !inQuotes;
+            }
+            continue;
+        }
+
+        if (ch === ',' && !inQuotes) {
+            result.push(cur);
+            cur = '';
+            continue;
+        }
+
+        cur += ch;
+    }
+
+    result.push(cur);
+    return result;
+}
+
 // ===========================
 // PRICE HELPERS
 // ===========================
 
 function getDiscountPercent(mrp, sellingPrice) {
-
     mrp = Number(mrp || 0);
     sellingPrice = Number(sellingPrice || 0);
 
     if (!mrp) return 0;
 
-    return Math.round(
-        ((mrp - sellingPrice) / mrp) * 100
-    );
+    return Math.round(((mrp - sellingPrice) / mrp) * 100);
 }
 
 function getFinalPrice(product) {
-
-    const selling =
-        Number(product.selling_price || 0);
-
-    const discount =
-        Number(product.discount_amount || 0);
-
-    return Math.max(
-        selling - discount,
-        0
-    );
+    const selling = Number(product.selling_price || 0);
+    const discount = Number(product.discount_amount || 0);
+    return Math.max(selling - discount, 0);
 }
 
 function isHotDeal(product) {
+    return getDiscountPercent(product.mrp, product.selling_price) > 49;
+}
 
-    return getDiscountPercent(
-        product.mrp,
-        product.selling_price
-    ) > 49;
+// ===========================
+// CATEGORY HELPERS (with counts)
+// ===========================
+
+function getUniqueCategoriesWithCount(products){
+    const map = {};
+    products.forEach(p=>{
+        const c = (p.category || 'Uncategorized').trim();
+        if(!c) return;
+        if(!map[c]) map[c] = { name: c, sampleImage: p.image || 'images/placeholder.svg', count: 0 };
+        map[c].count++;
+    });
+    return Object.values(map);
+}
+
+function renderCategories(products){
+    const container = document.getElementById('categoriesGrid');
+    if(!container) return;
+    const cats = getUniqueCategoriesWithCount(products);
+    container.innerHTML = cats.map(cat => `
+      <div class="category-tile" data-category="${escapeHTML(cat.name)}">
+        <a href="category.html?cat=${encodeURIComponent(cat.name)}" style="text-decoration:none;color:inherit;">
+          <div class="category-image">
+            <img src="${cat.sampleImage}" loading="lazy" alt="${escapeHTML(cat.name)}">
+            <div class="category-count-badge">${cat.count}</div>
+          </div>
+          <div class="category-name">${escapeHTML(cat.name)}</div>
+        </a>
+      </div>
+    `).join('');
 }
 
 // ===========================
@@ -150,148 +276,78 @@ function isHotDeal(product) {
 // ===========================
 
 function renderProducts(products) {
-
     if (!productsGrid) return;
 
     if (!products.length) {
-
-        productsGrid.innerHTML =
-            '<div class="loading">No products found.</div>';
-
+        productsGrid.innerHTML = '<div class="loading">No products found.</div>';
         return;
     }
 
-    productsGrid.innerHTML =
-        products
-            .map(createProductCard)
-            .join('');
+    productsGrid.innerHTML = products.map(createProductCard).join('');
+
+    // observe lazy images after render
+    requestAnimationFrame(() => { window.observeLazyImages && window.observeLazyImages(); });
+}
+
+// New helper: render a slice of products and optionally append
+function renderProductCards(products, append = false){
+    if (!productsGrid) return;
+    if(!products || !products.length){
+        if(!append) productsGrid.innerHTML = '<div class="loading">No products found.</div>';
+        return;
+    }
+    const html = products.map(createProductCard).join('');
+    if(append){
+        productsGrid.insertAdjacentHTML('beforeend', html);
+    } else {
+        productsGrid.innerHTML = html;
+    }
+    requestAnimationFrame(() => { window.observeLazyImages && window.observeLazyImages(); });
 }
 
 // ===========================
-// PRODUCT CARD
+// PRODUCT CARD (GRID)
 // ===========================
 
 function createProductCard(product) {
+    const discountPercent = getDiscountPercent(product.mrp, product.selling_price);
+    const finalPrice = getFinalPrice(product);
 
-    const discountPercent =
-        getDiscountPercent(
-            product.mrp,
-            product.selling_price
-        );
+    const shortDesc = (product.description || '').split('\n')[0] || '';
 
-    const hotDeal =
-        isHotDeal(product);
+    const flatDiscountBadge = Number(product.discount_amount) > 0
+        ? `<div class="flat-image-badge">Save ₹${Number(product.discount_amount).toLocaleString('en-IN')}</div>`
+        : '';
 
-    const finalPrice =
-        getFinalPrice(product);
+    const imageRatingBadge = `<div class="image-rating-badge">⭐ ${escapeHTML(product.rating || '5')} <span class="rating-count">(${formatCount(product.reviews || '0')})</span></div>`;
+
+    const imgSrc = product.image || 'images/placeholder.svg';
 
     return `
-
-    <div class="product-card">
-
-        <a href="product.html?id=${product.id}"
-           style="text-decoration:none;color:inherit;">
-
+    <div class="product-card" data-product-id="${escapeHTML(product.id)}" data-product-name="${escapeHTML(product.name)}">
+        <a class="product-link" href="product.html?id=${product.id}" style="text-decoration:none;color:inherit;">
             <div class="product-image-wrapper">
-
-                <img
-                    class="product-image"
-                    src="${product.image}"
-                    alt="${escapeHTML(product.name)}"
-                    loading="lazy">
-
-                <span class="product-category">
-                    ${product.category}
-                </span>
-
-                ${
-                    hotDeal
-                    ? '<span class="hot-deal-badge">🔥 HOT DEAL</span>'
-                    : ''
-                }
-
-                ${
-                    discountPercent > 0
-                    ? `
-                    <span class="discount-badge">
-                        ${discountPercent}% OFF
-                    </span>
-                    `
-                    : ''
-                }
-
+                <img class="product-image" src="${imgSrc}" alt="${escapeHTML(product.name)}" loading="lazy" onerror="this.src='images/placeholder.svg'">
+                ${flatDiscountBadge}
+                ${imageRatingBadge}
             </div>
-
         </a>
 
-        <div class="product-info">
-
-            <a href="product.html?id=${product.id}"
-               style="text-decoration:none;color:inherit;">
-
-                <h3 class="product-name">
-                    ${escapeHTML(product.name)}
-                </h3>
-
+        <div class="product-info compact">
+            <a class="product-link" href="product.html?id=${product.id}" style="text-decoration:none;color:inherit;">
+                <h4 class="grid-product-name">${escapeHTML(product.name)}</h4>
             </a>
 
-            <div class="price-box">
+            <p class="grid-product-desc">${escapeHTML(shortDesc)}</p>
 
-                <div class="mrp-price">
-                    ₹${formatPrice(product.mrp)}
-                </div>
-
-                <div class="selling-price">
-                    ₹${formatPrice(product.selling_price)}
-                </div>
-
-            </div>
-
-            ${
-                Number(product.discount_amount) > 0
-                ? `
-                <div class="flat-discount">
-                    Flat ₹${product.discount_amount} OFF
-                </div>
-                `
-                : ''
-            }
-
-            <div class="product-rating">
-
-                ⭐ ${product.rating || '5'}
-
-                (${product.reviews || '0'})
-
-            </div>
-
-            <div class="product-actions">
-
-                <button
-                    class="action-btn buy-btn"
-                    data-product-id="${product.id}"
-                    data-product-name="${escapeHTML(product.name)}"
-                    data-product-price="${finalPrice}">
-
-                    Buy Now
-
-                </button>
-
-                <button
-                    class="action-btn share-btn"
-                    data-product-id="${product.id}"
-                    data-product-name="${escapeHTML(product.name)}">
-
-                    Share
-
-                </button>
-
+            <div class="price-row-grid">
+                <span class="mrp-price">₹${formatPrice(product.mrp)}</span>
+                <span class="selling-price">₹${formatPrice(product.selling_price)}</span>
+                ${discountPercent > 0 ? `<span class="discount-percent">${discountPercent}%</span>` : ''}
             </div>
 
         </div>
-
     </div>
-
     `;
 }
 
@@ -300,567 +356,139 @@ function createProductCard(product) {
 // ===========================
 
 function attachProductCardListeners() {
-
-    document
-        .querySelectorAll('.buy-btn')
-        .forEach(btn => {
-
-            btn.addEventListener(
-                'click',
-                handleBuyClick
-            );
-
-        });
-
-    document
-        .querySelectorAll('.share-btn')
-        .forEach(btn => {
-
-            btn.addEventListener(
-                'click',
-                handleShareClick
-            );
-
-        });
+    // nothing needed for compact grid cards; product click tracking handled globally
 }
 
-// ===========================
-// RE-ATTACH AFTER RENDER
-// ===========================
-
-const originalRenderProducts =
-    renderProducts;
-
-renderProducts = function(products) {
-
-    originalRenderProducts(products);
-
-    attachProductCardListeners();
-
-};
+const originalRenderProducts = renderProducts;
 
 // ===========================
-// BUY NOW
-// ===========================
-
-function handleBuyClick(event) {
-
-    event.preventDefault();
-
-    event.stopPropagation();
-
-    const productName =
-        event.target.getAttribute(
-            'data-product-name'
-        );
-
-    const productPrice =
-        event.target.getAttribute(
-            'data-product-price'
-        );
-
-    const message =
-
-`Hi,
-
-I want to order:
-
-${productName}
-
-Price: ₹${productPrice}
-
-From JMDMall.com`;
-
-    const whatsappUrl =
-
-        CONFIG.WHATSAPP_API_URL +
-        CONFIG.WHATSAPP_NUMBER +
-        '?text=' +
-        encodeURIComponent(message);
-
-    window.open(
-        whatsappUrl,
-        '_blank'
-    );
-}
-
-// ===========================
-// SHARE
-// ===========================
-
-function handleShareClick(event) {
-
-    event.preventDefault();
-
-    event.stopPropagation();
-
-    const productId =
-        event.target.getAttribute(
-            'data-product-id'
-        );
-
-    const productName =
-        event.target.getAttribute(
-            'data-product-name'
-        );
-
-    const shareUrl =
-        window.location.origin +
-        '/product.html?id=' +
-        productId;
-
-    if (navigator.share) {
-
-        navigator.share({
-
-            title: productName,
-
-            text:
-                'Check this product on JMD Mall',
-
-            url: shareUrl
-
-        });
-
-    } else {
-
-        navigator.clipboard.writeText(
-            shareUrl
-        );
-
-        alert(
-            'Product link copied.'
-        );
-    }
-}
-
-// ===========================
-// SEARCH
+// SEARCH & FILTER
 // ===========================
 
 function handleSearch() {
-
-    const searchTerm =
-        searchInput.value
-            .toLowerCase()
-            .trim();
+    const searchTerm = (searchInput && searchInput.value || '').toLowerCase().trim();
 
     if (!searchTerm) {
-
-        filteredProducts =
-            [...allProducts];
-
+        filteredProducts = [...allProducts];
     } else {
-
-        filteredProducts =
-            allProducts.filter(product =>
-
-                (product.name || '')
-                    .toLowerCase()
-                    .includes(searchTerm)
-
-                ||
-
-                (product.category || '')
-                    .toLowerCase()
-                    .includes(searchTerm)
-
-                ||
-
-                (product.brand || '')
-                    .toLowerCase()
-                    .includes(searchTerm)
-
-            );
+        filteredProducts = allProducts.filter(product =>
+            (product.name || '').toLowerCase().includes(searchTerm) ||
+            (product.category || '').toLowerCase().includes(searchTerm) ||
+            (product.brand || '').toLowerCase().includes(searchTerm)
+        );
     }
 
     renderProducts(filteredProducts);
 }
 
-// ===========================
-// CATEGORY FILTER
-// ===========================
-
 function handleFilter(event) {
+    const category = event.target.dataset.filter;
 
-    const category =
-        event.target.dataset.filter;
-
-    filterButtons.forEach(btn =>
-        btn.classList.remove('active')
-    );
-
+    filterButtons.forEach(btn => btn.classList.remove('active'));
     event.target.classList.add('active');
 
     if (category === 'all') {
-
-        filteredProducts =
-            [...allProducts];
-
+        filteredProducts = [...allProducts];
     } else {
-
-        filteredProducts =
-            allProducts.filter(product =>
-
-                product.category === category
-
-            );
+        filteredProducts = allProducts.filter(product => product.category === category);
     }
 
-    if (searchInput) {
-        searchInput.value = '';
-    }
-
+    if (searchInput) searchInput.value = '';
     renderProducts(filteredProducts);
 }
 
-// ===========================
-// EVENT LISTENERS
-// ===========================
-
 function setupEventListeners() {
-
     if (searchInput) {
-
-        searchInput.addEventListener(
-            'input',
-            handleSearch
-        );
-
-        searchInput.addEventListener(
-            'keypress',
-            e => {
-
-                if (e.key === 'Enter') {
-
-                    handleSearch();
-
-                }
-
-            }
-        );
+        searchInput.addEventListener('input', handleSearch);
+        searchInput.addEventListener('keypress', e => { if (e.key === 'Enter') handleSearch(); });
     }
+    if (searchBtn) searchBtn.addEventListener('click', handleSearch);
+    filterButtons.forEach(button => button.addEventListener('click', handleFilter));
 
-    if (searchBtn) {
+    // product click tracking - delegate from productsGrid
+    try{
+        if(productsGrid){
+            productsGrid.addEventListener('click', function(e){
+                const link = e.target.closest('a.product-link');
+                if(!link) return;
+                const href = link.getAttribute('href') || '';
+                if(href.indexOf('product.html') !== 0) return; // not a product link
 
-        searchBtn.addEventListener(
-            'click',
-            handleSearch
-        );
+                const card = link.closest('.product-card');
+                const pid = card && card.dataset && card.dataset.productId;
+                const pname = card && card.dataset && card.dataset.productName;
 
-    }
-
-    filterButtons.forEach(button => {
-
-        button.addEventListener(
-            'click',
-            handleFilter
-        );
-
-    });
-
-    const contactForm =
-        document.getElementById(
-            'contactForm'
-        );
-
-    if (contactForm) {
-
-        contactForm.addEventListener(
-            'submit',
-            handleFormSubmit
-        );
-
-    }
+                // send analytics event
+                trackEvent('product_click', { product_id: pid || '', product_name: pname || '', href });
+                // do not prevent navigation; GA may send asynchronously
+            });
+        }
+    }catch(e){ console.warn('product click tracking setup failed', e); }
 }
 
 // ===========================
-// CONTACT FORM
+// UTILITIES
 // ===========================
 
-function handleFormSubmit(e) {
+function formatPrice(price) { return Number(price || 0).toLocaleString('en-IN'); }
+function escapeHTML(text) { if (!text) return ''; const map = {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":"&#039;"}; return String(text).replace(/[&<>\"']/g,m=>map[m]); }
 
-    e.preventDefault();
-
-    showNotification(
-        'Thank you. We received your message.'
-    );
-
-    e.target.reset();
+function formatCount(value){
+    const n = Number(String(value).replace(/[^0-9.-]+/g,'')) || 0;
+    if (n >= 1000000) return (Math.round(n/100000)/10).toFixed(1).replace(/\.0$/,'') + 'M';
+    if (n >= 1000) return (Math.round(n/100)/10).toFixed(1).replace(/\.0$/,'') + 'K';
+    return String(n);
 }
-
-// ===========================
-// NOTIFICATION
-// ===========================
-
-function showNotification(message) {
-
-    const div =
-        document.createElement('div');
-
-    div.innerText = message;
-
-    div.style.position = 'fixed';
-    div.style.top = '90px';
-    div.style.right = '20px';
-    div.style.background = '#28a745';
-    div.style.color = '#fff';
-    div.style.padding = '12px 18px';
-    div.style.borderRadius = '8px';
-    div.style.zIndex = '9999';
-
-    document.body.appendChild(div);
-
-    setTimeout(() => {
-
-        div.remove();
-
-    }, 3000);
-}
-
-// ===========================
-// FORMAT PRICE
-// ===========================
-
-function formatPrice(price) {
-
-    return Number(price || 0)
-        .toLocaleString('en-IN');
-
-}
-
-// ===========================
-// ESCAPE HTML
-// ===========================
-
-function escapeHTML(text) {
-
-    if (!text) return '';
-
-    const map = {
-
-        '&': '&amp;',
-        '<': '&lt;',
-        '>': '&gt;',
-        '"': '&quot;',
-        "'": '&#039;'
-
-    };
-
-    return text.replace(
-        /[&<>"']/g,
-        m => map[m]
-    );
-}
-
-// ===========================
-// ACTIVE MENU
-// ===========================
 
 function updateActiveNavLink() {
-
-    const currentPage =
-        window.location.pathname
-        .split('/')
-        .pop();
-
-    document
-        .querySelectorAll('.nav-link')
-        .forEach(link => {
-
-            link.classList.remove(
-                'active'
-            );
-
-            if (
-                link.getAttribute('href')
-                === currentPage
-            ) {
-
-                link.classList.add(
-                    'active'
-                );
-
-            }
-
-        });
+    const currentPage = window.location.pathname.split('/').pop();
+    document.querySelectorAll('.nav-link').forEach(link => {
+        link.classList.remove('active');
+        if (link.getAttribute('href') === currentPage) link.classList.add('active');
+    });
 }
 
 // ===========================
-// SLIDESHOW
+// SLIDESHOW (unchanged)
 // ===========================
 
 function initSlideshow() {
-
-    const wrapper =
-        document.getElementById(
-            'slidesWrapper'
-        );
-
+    const wrapper = document.getElementById('slidesWrapper');
     if (!wrapper) return;
 
-    const slides =
-        wrapper.querySelectorAll(
-            '.slide'
-        );
-
-    const dotsContainer =
-        document.getElementById(
-            'slideDots'
-        );
-
-    const prevBtn =
-        document.getElementById(
-            'prevSlide'
-        );
-
-    const nextBtn =
-        document.getElementById(
-            'nextSlide'
-        );
+    const slides = wrapper.querySelectorAll('.slide');
+    const dotsContainer = document.getElementById('slideDots');
+    const prevBtn = document.getElementById('prevSlide');
+    const nextBtn = document.getElementById('nextSlide');
 
     let current = 0;
 
+    dotsContainer.innerHTML = '';
+
     slides.forEach((slide, index) => {
-
-        const dot =
-            document.createElement('div');
-
+        const dot = document.createElement('div');
         dot.className = 'dot';
-
-        if (index === 0) {
-
-            dot.classList.add(
-                'active'
-            );
-
-        }
-
-        dot.addEventListener(
-            'click',
-            () => goToSlide(index)
-        );
-
+        if (index === 0) dot.classList.add('active');
+        dot.addEventListener('click', () => goToSlide(index));
         dotsContainer.appendChild(dot);
-
     });
 
-    const dots =
-        dotsContainer.querySelectorAll(
-            '.dot'
-        );
+    const dots = dotsContainer.querySelectorAll('.dot');
 
     function goToSlide(index) {
-
         current = index;
-
-        wrapper.style.transform =
-            `translateX(-${current * 100}%)`;
-
-        dots.forEach(dot =>
-            dot.classList.remove(
-                'active'
-            )
-        );
-
-        dots[current].classList.add(
-            'active'
-        );
+        wrapper.style.transform = `translateX(-${current * 100}%)`;
+        dots.forEach(dot => dot.classList.remove('active'));
+        dots[current].classList.add('active');
     }
 
-    function nextSlide() {
+    function nextSlide() { current = (current + 1) % slides.length; goToSlide(current); }
+    function prevSlide() { current = (current - 1 + slides.length) % slides.length; goToSlide(current); }
 
-        current++;
+    if (nextBtn) nextBtn.addEventListener('click', nextSlide);
+    if (prevBtn) prevBtn.addEventListener('click', prevSlide);
 
-        if (
-            current >= slides.length
-        ) {
-
-            current = 0;
-
-        }
-
-        goToSlide(current);
-    }
-
-    function prevSlide() {
-
-        current--;
-
-        if (current < 0) {
-
-            current =
-                slides.length - 1;
-
-        }
-
-        goToSlide(current);
-    }
-
-    if (nextBtn) {
-
-        nextBtn.addEventListener(
-            'click',
-            nextSlide
-        );
-
-    }
-
-    if (prevBtn) {
-
-        prevBtn.addEventListener(
-            'click',
-            prevSlide
-        );
-
-    }
-
-    setInterval(
-        nextSlide,
-        4000
-    );
+    setInterval(nextSlide, 4000);
 }
 
-// ===========================
-// PERFORMANCE
-// ===========================
-
-window.addEventListener(
-    'load',
-    function () {
-
-        console.log(
-            'JMD Mall Loaded'
-        );
-
-    }
-);
-
-// ===========================
-// ERROR HANDLING
-// ===========================
-
-window.addEventListener(
-    'error',
-    function (e) {
-
-        console.error(
-            'JS Error:',
-            e.error
-        );
-
-    }
-);
-
-window.addEventListener(
-    'unhandledrejection',
-    function (e) {
-
-        console.error(
-            'Promise Error:',
-            e.reason
-        );
-
-    }
-);
-
+window.addEventListener('load', () => console.log('JMD Mall Loaded'));
