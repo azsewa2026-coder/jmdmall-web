@@ -1020,3 +1020,71 @@ a:hover {
 .share-btn:hover{
     background:#0f4a7a;
 }
+
+
+/* ==========================================================================
+   Categories Responsive Grid Layout 
+   ========================================================================== */
+
+/* The main container wrapper */
+.categories-grid {
+    display: grid;
+    /* Default for Mobile: 2 columns in one line */
+    grid-template-columns: repeat(2, 1fr); 
+    gap: 16px; /* Space between the tiles */
+    padding: 16px 0;
+    width: 100%;
+}
+
+/* Responsive Breakpoint for Medium Screens (Tablets / md) */
+@media (min-width: 768px) {
+    .categories-grid {
+        /* Medium Screen: 4 categories in one line */
+        grid-template-columns: repeat(4, 1fr);
+    }
+}
+
+/* Responsive Breakpoint for Large Screens (Desktops / lg) */
+@media (min-width: 1024px) {
+    .categories-grid {
+        /* Large Screen: 6 categories in one line */
+        grid-template-columns: repeat(6, 1fr);
+    }
+}
+
+/* ==========================================================================
+   Category Tile Styling (Clean Box Look)
+   ========================================================================== */
+.category-tile {
+    background: #ffffff;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    padding: 20px 15px;
+    text-align: center;
+    cursor: pointer;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    min-height: 100px; /* Ensures a consistent, clean box shape */
+}
+
+/* Subtle hover effect when selecting categories */
+.category-tile:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    border-color: #007bff; /* Optional accent color on hover */
+}
+
+.category-tile h3 {
+    margin: 0 0 6px 0;
+    font-size: 1rem;
+    color: #333333;
+}
+
+.category-tile p {
+    margin: 0;
+    font-size: 0.85rem;
+    color: #777777;
+}
