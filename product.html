@@ -1,1 +1,386 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Product Details - JMD Mall</title>
+<link rel="stylesheet" href="css/style.css">
+
+<style>
+.product-page{
+    max-width:1400px;
+    margin:30px auto;
+    padding:20px;
+}
+
+.product-detail-card{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:40px;
+    background:#fff;
+    padding:25px;
+    border-radius:12px;
+    box-shadow:0 2px 10px rgba(0,0,0,.08);
+}
+
+.product-detail-image{
+    width:100%;
+    border-radius:10px;
+    max-height:550px;
+    object-fit:cover;
+}
+
+.price-row{
+    margin:15px 0;
+}
+
+.mrp{
+    text-decoration:line-through;
+    color:#777;
+    margin-right:10px;
+}
+
+.sell-price{
+    font-size:32px;
+    font-weight:bold;
+    color:#e63946;
+}
+
+.discount-circle{
+    display:inline-block;
+    background:#e63946;
+    color:#fff;
+    padding:8px 12px;
+    border-radius:999px;
+    margin-left:10px;
+    font-size:14px;
+}
+
+.flat-discount{
+    display:inline-block;
+    margin-top:10px;
+    background:#28a745;
+    color:#fff;
+    padding:8px 12px;
+    border-radius:6px;
+    font-weight:600;
+}
+
+.hot-deal{
+    display:inline-block;
+    background:#ff0000;
+    color:white;
+    padding:8px 14px;
+    border-radius:6px;
+    font-weight:bold;
+    margin-bottom:10px;
+}
+
+.detail-table{
+    margin-top:20px;
+}
+
+.detail-table div{
+    padding:10px 0;
+    border-bottom:1px solid #eee;
+}
+
+.assured-box{
+    margin-top:25px;
+    padding:20px;
+    background:#f8f9fa;
+    border-radius:8px;
+}
+
+.whatsapp-btn{
+    display:inline-block;
+    margin-top:20px;
+    background:#25D366;
+    color:white;
+    padding:14px 22px;
+    border-radius:8px;
+    font-weight:bold;
+}
+
+.share-btn{
+    display:inline-block;
+    margin-left:10px;
+    background:#146EB4;
+    color:white;
+    padding:14px 22px;
+    border-radius:8px;
+}
+
+.out-stock{
+    color:red;
+    font-weight:bold;
+}
+
+.in-stock{
+    color:green;
+    font-weight:bold;
+}
+
+@media(max-width:768px){
+.product-detail-card{
+grid-template-columns:1fr;
+}
+}
+</style>
+
+</head>
+<body>
+
+<nav class="navbar">
+    <div class="nav-container">
+        <div class="nav-logo">
+            <a href="index.html">JMD Mall</a>
+        </div>
+    </div>
+</nav>
+
+<main class="product-page">
+
+<div id="productContainer">
+Loading Product...
+</div>
+
+</main>
+
+<script>
+
+const CSV_URL='products.csv';
+const WHATSAPP='9779705446407';
+
+async function loadProduct(){
+
+    const params=new URLSearchParams(window.location.search);
+    const id=params.get('id');
+
+    const response=await fetch(CSV_URL);
+    const csv=await response.text();
+
+    const products=parseCSV(csv);
+
+    const product=products.find(p=>p.id===id);
+
+    if(!product){
+        document.getElementById('productContainer').innerHTML=
+        '<h2>Product Not Found</h2>';
+        return;
+    }
+
+    renderProduct(product);
+}
+
+function parseCSV(csv){
+
+    const lines=csv.trim().split('\n');
+    const headers=lines[0].split(',');
+
+    const data=[];
+
+    for(let i=1;i<lines.length;i++){
+
+        const values=lines[i].split(',');
+
+        const obj={};
+
+        headers.forEach((header,index)=>{
+            obj[header.trim()]=values[index]?.trim() || '';
+        });
+
+        data.push(obj);
+    }
+
+    return data;
+}
+
+function renderProduct(product){
+
+    const mrp=parseFloat(product.mrp);
+    const selling=parseFloat(product.selling_price);
+    const seasonal=parseFloat(product.discount_amount||0);
+
+    const discount=Math.round(((mrp-selling)/mrp)*100);
+
+    const hotDeal=discount>49;
+
+    const deliveryDate=new Date();
+    deliveryDate.setDate(deliveryDate.getDate()+7);
+
+    const shippingText=
+    product.shipping==="0" || product.shipping===""
+    ? "Free Shipping"
+    : "₹"+product.shipping;
+
+    const stockText=
+    Number(product.stock)<=0
+    ? '<span class="out-stock">Out Of Stock</span>'
+    : '<span class="in-stock">In Stock ('+product.stock+')</span>';
+
+    const html=`
+
+    <div class="product-detail-card">
+
+        <div>
+            <img src="${product.image}"
+                 alt="${product.name}"
+                 class="product-detail-image">
+        </div>
+
+        <div>
+
+            ${hotDeal ? '<div class="hot-deal">🔥 HOT DEAL</div>' : ''}
+
+            <h1>${product.name}</h1>
+
+            <div>
+                ⭐ ${product.rating}
+                (${product.reviews} Reviews)
+            </div>
+
+            <div class="price-row">
+
+                <span class="mrp">
+                ₹${mrp.toLocaleString('en-IN')}
+                </span>
+
+                <span class="sell-price">
+                ₹${selling.toLocaleString('en-IN')}
+                </span>
+
+                <span class="discount-circle">
+                ${discount}% OFF
+                </span>
+
+            </div>
+
+            ${
+                seasonal>0
+                ? `<div class="flat-discount">
+                    Flat ₹${seasonal} OFF
+                   </div>`
+                : ''
+            }
+
+            <p style="margin-top:20px;">
+            ${product.description}
+            </p>
+
+            <div class="detail-table">
+
+                <div>
+                <strong>Brand:</strong>
+                ${product.brand}
+                </div>
+
+                <div>
+                <strong>SKU:</strong>
+                ${product.sku}
+                </div>
+
+                <div>
+                <strong>Warranty:</strong>
+                ${product.warranty}
+                </div>
+
+                <div>
+                <strong>Shipping:</strong>
+                ${shippingText}
+                </div>
+
+                <div>
+                <strong>Country Of Origin:</strong>
+                ${product.country_of_origin}
+                </div>
+
+                <div>
+                <strong>Status:</strong>
+                ${stockText}
+                </div>
+
+                <div>
+                <strong>Estimated Delivery:</strong>
+                ${deliveryDate.toDateString()}
+                </div>
+
+                <div>
+                <strong>Sold & Delivered By:</strong>
+                Jay Mata Di Enterprises
+                </div>
+
+                <div>
+                <strong>Email:</strong>
+                info@jmdmall.com
+                </div>
+
+                <div>
+                <strong>Phone:</strong>
+                +977 9705446407
+                </div>
+
+            </div>
+
+            <a class="whatsapp-btn"
+               target="_blank"
+               href="https://wa.me/${WHATSAPP}?text=${encodeURIComponent(
+                'Hi, I want to order '+product.name
+               )}">
+               Buy on WhatsApp
+            </a>
+
+            <button
+                class="share-btn"
+                onclick="shareProduct()">
+                Share Product
+            </button>
+
+            <div class="assured-box">
+
+                <h3>JMDMall Assured</h3>
+
+                <p>✓ Easy Returns & Replacement</p>
+
+                <p>✓ Cash On Delivery Available</p>
+
+                <p>✓ Genuine Products</p>
+
+                <p>✓ 24/7 Customer Support</p>
+
+                <p>✓ Secure WhatsApp Ordering</p>
+
+            </div>
+
+        </div>
+
+    </div>
+    `;
+
+    document.getElementById('productContainer').innerHTML=html;
+}
+
+function shareProduct(){
+
+    if(navigator.share){
+
+        navigator.share({
+            title:document.title,
+            url:window.location.href
+        });
+
+    }else{
+
+        navigator.clipboard.writeText(window.location.href);
+        alert('Product link copied');
+    }
+}
+
+loadProduct();
+
+</script>
+
+</body>
+</html>
 
